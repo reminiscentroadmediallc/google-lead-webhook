@@ -14,11 +14,15 @@ SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
 
 @app.route("/google-lead-webhook", methods=["POST"])
 def receive_lead():
+    key = request.args.get("key")
+    if key != "wherememoriesmatter1230825":
+        return jsonify({"status": "unauthorized"}), 403
+
     data = request.get_json()
 
     message = "New Google Lead Received:\n\n"
-    for key, value in data.items():
-        message += f"{key}: {value}\n"
+    for k, v in data.items():
+        message += f"{k}: {v}\n"
 
     try:
         msg = MIMEText(message)
