@@ -1,54 +1,42 @@
-from flask import Flask, request, jsonify
-import smtplib
-from email.mime.text import MIMEText
 import os
+import json
+from flask import Flask, request
 
 app = Flask(__name__)
 
-# Load email credentials and recipient
-EMAIL_TO = "info@reminiscentroadmedia.com"
-EMAIL_FROM = os.environ.get("SMTP_USERNAME")
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_USERNAME = os.environ.get("SMTP_USERNAME")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
-EXPECTED_KEY = os.environ.get("GOOGLE_WEBHOOK_KEY")
+@app.route('/google-lead-webhook', methods=['POST'])
+def receive_google_lead():
+    api_key = os.getenv('GOOGLE_WEBHOOK_KEY')
+    auth_header = request.headers.get('Authorization')
 
-@app.route("/google-lead-webhook", methods=["POST"])
-def receive_lead():
-    # Validate content type
-    if request.headers.get("Content-Type") != "application/json":
-        return jsonify({"status": "invalid content type"}), 400
+    # Validate Authorization header
+    if auth_header != api_key:
+        return json.dumps({'status': 'unauthorized'}), 403
 
-    data = request.get_json()
-    if not data or "user_column_data" not in data:
-        return jsonify({"status": "invalid payload"}), 400
-
-    # Optional header key check (adjust if needed)
-    received_key = request.headers.get("X-Goog-Signature")
-    if EXPECTED_KEY and received_key != EXPECTED_KEY:
-        return jsonify({"status": "unauthorized"}), 403
-
-    # Build the message
-    message = "New Google Lead Received:\n\n"
-    for field in data.get("user_column_data", []):
-        message += f"{field.get('column_name')}: {field.get('string_value')}\n"
-
-    # Send the email
     try:
-        msg = MIMEText(message)
-        msg['Subject'] = "New Google Lead Form Submission"
-        msg['From'] = EMAIL_FROM
-        msg['To'] = EMAIL_TO
+        payload = request.get_json()
 
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.sendmail(EMAIL_FROM, [EMAIL_TO], msg.as_string())
+        # Handle both nested and flat formats
+        lead = payload.get('lead', payload)
 
-        return jsonify({"status": "success"}), 200
+        lead_id = lead.get('lead_id')
+        form_id = lead.get('form_id')
+        user_data = lead.get('user_column_data', [])
+
+        # Optional: print to server logs
+        print("✅ Lead received:")
+        print(json.dumps({
+            "lead_id": lead_id,
+            "form_id": form_id,
+            "user_data": user_data
+        }, indent=2))
+
+        return json.dumps({'status': 'success'}), 200
+
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print("❌ Error processing lead:", str(e))
+        return json.dumps({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
