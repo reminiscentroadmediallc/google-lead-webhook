@@ -5,25 +5,36 @@ import os
 
 app = Flask(__name__)
 
+# Load email credentials and recipient
 EMAIL_TO = "info@reminiscentroadmedia.com"
 EMAIL_FROM = os.environ.get("SMTP_USERNAME")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SMTP_USERNAME = os.environ.get("SMTP_USERNAME")
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
+EXPECTED_KEY = os.environ.get("GOOGLE_WEBHOOK_KEY")
 
 @app.route("/google-lead-webhook", methods=["POST"])
 def receive_lead():
-    key = request.args.get("key")
-    if key != "wherememoriesmatter1230825":
-        return jsonify({"status": "unauthorized"}), 403
+    # Validate content type
+    if request.headers.get("Content-Type") != "application/json":
+        return jsonify({"status": "invalid content type"}), 400
 
     data = request.get_json()
+    if not data or "user_column_data" not in data:
+        return jsonify({"status": "invalid payload"}), 400
 
+    # Optional header key check (adjust if needed)
+    received_key = request.headers.get("X-Goog-Signature")
+    if EXPECTED_KEY and received_key != EXPECTED_KEY:
+        return jsonify({"status": "unauthorized"}), 403
+
+    # Build the message
     message = "New Google Lead Received:\n\n"
-    for k, v in data.items():
-        message += f"{k}: {v}\n"
+    for field in data.get("user_column_data", []):
+        message += f"{field.get('column_name')}: {field.get('string_value')}\n"
 
+    # Send the email
     try:
         msg = MIMEText(message)
         msg['Subject'] = "New Google Lead Form Submission"
