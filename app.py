@@ -6,25 +6,22 @@ app = Flask(__name__)
 
 @app.route('/google-lead-webhook', methods=['POST'])
 def receive_google_lead():
-    api_key = os.getenv('GOOGLE_WEBHOOK_KEY')
-    auth_header = request.headers.get('Authorization')
-
-    # Validate Authorization header
-    if auth_header != api_key:
-        return json.dumps({'status': 'unauthorized'}), 403
-
+    expected_key = os.getenv('GOOGLE_WEBHOOK_KEY')
     try:
         payload = request.get_json()
 
-        # Handle both nested and flat formats
-        lead = payload.get('lead', payload)
+        # ✅ Google sends the key in JSON payload, not headers
+        received_key = payload.get('google_key')
 
-        lead_id = lead.get('lead_id')
-        form_id = lead.get('form_id')
-        user_data = lead.get('user_column_data', [])
+        if not received_key or received_key != expected_key:
+            return json.dumps({'status': 'unauthorized'}), 403
 
-        # Optional: print to server logs
-        print("✅ Lead received:")
+        lead_id = payload.get('lead_id')
+        form_id = payload.get('form_id')
+        user_data = payload.get('user_column_data', [])
+
+        # Log the payload (optional)
+        print("✅ Google Ads Test Lead Received:")
         print(json.dumps({
             "lead_id": lead_id,
             "form_id": form_id,
@@ -34,7 +31,7 @@ def receive_google_lead():
         return json.dumps({'status': 'success'}), 200
 
     except Exception as e:
-        print("❌ Error processing lead:", str(e))
+        print("❌ Error processing Google Ads lead:", str(e))
         return json.dumps({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
